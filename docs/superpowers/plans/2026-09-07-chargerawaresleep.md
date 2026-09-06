@@ -19,6 +19,7 @@
 - 앱 실행 파일 빌드는 `-O -parse-as-library`를 쓴다. `-parse-as-library` 없이는 `@main`이 "top-level code" 오류로 실패한다.
 - 전원 판정은 charging 여부가 아니라 공급원으로 한다. 기준값은 `kIOPSACPowerValue`("AC Power")다. (spec 실측 04)
 - 앱은 `/etc/sudoers.d`에 쓰지 않는다. sudoers 규칙 설치는 사용자가 직접 한다.
+- sudoers 규칙의 값 자리에 와일드카드를 쓰지 않는다. `disablesleep *` 는 `pmset -a` 의 다중 설정 체이닝 때문에 임의 전원 설정을 연다 (2026-09-07 실측).
 - 종료 시에는 모드와 무관하게 `disablesleep 0`으로 복원한다. (spec 상태 모델)
 - 번들 식별자: `dev.local.ChargerAwareSleep`. UserDefaults 키: `mode`.
 - 한글 주석을 쓴다. 실측·실험으로 정한 값에는 근거와 날짜를 주석으로 남긴다.
@@ -317,9 +318,14 @@ SleepDisabled 와 AppleClamshellState 는 IOPMrootDomain 에서,
 #     install/chargerawaresleep.sudoers /etc/sudoers.d/chargerawaresleep
 #   sudo visudo -c -f /etc/sudoers.d/chargerawaresleep
 #
-# 보안 영향: admin 그룹의 임의 프로세스가 암호 없이 이 명령을 실행할 수 있다.
-# 영향 범위는 잠자기 정책 변경으로 한정된다.
-%admin ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep *
+# 보안 영향: admin 그룹의 임의 프로세스가 암호 없이 아래 두 명령을 실행할 수 있다.
+#
+# 값 자리에 와일드카드를 쓰지 않는다. sudoers 의 인자 매칭은 fnmatch 전체 일치이고
+# `*` 는 공백까지 매칭하는데, pmset -a 는 `pmset -a k1 v1 k2 v2 ...` 형태의 다중 설정
+# 체이닝을 지원한다. 그래서 `disablesleep *` 한 줄이면 hibernatemode, standby, womp 등
+# pmset -a 가 다루는 임의 설정이 전부 열린다. 2026-09-07 실측으로 확인했다.
+%admin ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0
+%admin ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1
 ```
 
 - [ ] **Step 2: `Sources/SleepControl.swift` 구현**
@@ -338,7 +344,6 @@ enum SleepControl {
 
     /// pmset 의 disablesleep 은 man 페이지에 없는 미문서화 설정이다.
     /// macOS major 업그레이드 때마다 회귀 확인이 필요하다. (spec 실측 05)
-    @discardableResult
     static func set(_ disabled: Bool) -> Result<Void, SleepControlError> {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
@@ -347,7 +352,9 @@ enum SleepControl {
 
         let errorPipe = Pipe()
         process.standardError = errorPipe
-        process.standardOutput = Pipe()
+        // 읽지 않을 파이프를 두면 stdout 이 커널 버퍼를 채웠을 때 교착된다.
+        // nullDevice 는 백프레셔가 없다.
+        process.standardOutput = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -572,7 +579,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Cmd-Q, launchctl, 로그아웃 등 어떤 경로로 끝나든 복원한다.
         // SleepControl 은 MainActor 격리가 없는 순수 enum 이라 Controller 를 거치지 않는다.
         // (MainActor.assumeIsolated 는 macOS 14 이상이라 타겟 13.0 에서 쓸 수 없다)
-        SleepControl.set(false)
+        // 여기서는 실패해도 할 수 있는 일이 없다 — 프로세스가 죽는 중이다.
+        // 반환값을 버리는 것이 의도임을 `_ =` 로 명시한다.
+        _ = SleepControl.set(false)
     }
 }
 
