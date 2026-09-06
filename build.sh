@@ -5,9 +5,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP="$ROOT/build/ChargerAwareSleep.app"
 
+if [ ! -f "$ROOT/Resources/AppIcon.icns" ]; then
+  echo "오류: Resources/AppIcon.icns 가 없습니다. ./make-icon.sh 를 먼저 실행하세요." >&2
+  exit 1
+fi
+
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/Resources"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 swiftc -O -parse-as-library -target arm64-apple-macos13.0 \
   -o "$APP/Contents/MacOS/ChargerAwareSleep" \
