@@ -394,6 +394,8 @@ Expected: 암호를 묻지 않고 `Yes` → `No` 로 바뀐다.
 
 ```bash
 cat > /tmp/cas_write.swift <<'EOF'
+import Foundation   // exit(_:) 에 필요하다
+
 @main struct W {
     static func main() {
         for want in [true, false] {
@@ -450,7 +452,7 @@ UI, 전원 변경 구독, 종료 복원. 여기서 앱이 처음으로 실행 �
 
 **Interfaces:**
 - Consumes: `Mode`, `PowerSource`, `desiredSleepDisabled` (Task 1), `SystemState` (Task 2), `SleepControl` (Task 3)
-- Produces: `ChargerAwareSleepApp`, `Controller`
+- Produces: `ChargerAwareSleepApp`, `Controller`, `AppDelegate`
 
 - [ ] **Step 1: `Resources/Info.plist` 작성**
 
@@ -563,25 +565,20 @@ final class Controller: ObservableObject {
         refresh()
     }
 
-    /// 종료 시에는 모드와 무관하게 복원한다.
-    /// 1 이 남으면 가방 안에서 잠들지 않아 방전·발열이 생긴다.
-    /// 0 이 남으면 그냥 원래 macOS 동작이다. 실패 모드가 비대칭이라 복원 쪽으로 기운다.
-    func restoreOnExit() {
-        SleepControl.set(false)
-    }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    var controller: Controller?
-
     func applicationWillTerminate(_ notification: Notification) {
         // Cmd-Q, launchctl, 로그아웃 등 어떤 경로로 끝나든 복원한다.
-        MainActor.assumeIsolated { controller?.restoreOnExit() }
+        // SleepControl 은 MainActor 격리가 없는 순수 enum 이라 Controller 를 거치지 않는다.
+        // (MainActor.assumeIsolated 는 macOS 14 이상이라 타겟 13.0 에서 쓸 수 없다)
+        SleepControl.set(false)
     }
 }
 
 @main
 struct ChargerAwareSleepApp: App {
+    // 종료 알림을 받기 위해서만 필요하다. controller 를 넘기지 않는다.
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var controller = Controller()
 
@@ -613,9 +610,6 @@ struct ChargerAwareSleepApp: App {
         } label: {
             Image(systemName: controller.sleepDisabled ? "bolt.fill" : "bolt.slash")
         }
-        .onChange(of: controller.sleepDisabled) { _, _ in
-            delegate.controller = controller
-        }
     }
 
     /// 앱이 믿는 값이 아니라 IORegistry 에서 읽은 실제 값을 보여준다.
@@ -628,25 +622,12 @@ struct ChargerAwareSleepApp: App {
 }
 ```
 
-- [ ] **Step 4: `delegate.controller` 배선을 `onChange` 대신 확실한 곳으로 옮긴다**
-
-`onChange`는 값이 바뀔 때만 실행돼 첫 종료에서 `controller`가 `nil`일 수 있다. `MenuBarExtra`의 `label` 클로저에서 매번 대입하도록 바꾼다.
-
-`ChargerAwareSleepApp` 안에서 `.onChange(of:)` 블록을 지우고, `label:` 클로저를 다음으로 교체한다:
-
-```swift
-        } label: {
-            let _ = { delegate.controller = controller }()
-            Image(systemName: controller.sleepDisabled ? "bolt.fill" : "bolt.slash")
-        }
-```
-
-- [ ] **Step 5: 빌드**
+- [ ] **Step 4: 빌드**
 
 Run: `./build.sh`
 Expected: `빌드 완료: .../build/ChargerAwareSleep.app`, 경고나 오류 없음
 
-- [ ] **Step 6: 실행하고 메뉴 확인**
+- [ ] **Step 5: 실행하고 메뉴 확인**
 
 ```bash
 open build/ChargerAwareSleep.app
@@ -657,7 +638,7 @@ ioreg -n IOPMrootDomain -r -d1 | grep -o '"SleepDisabled" = [A-Za-z]*'
 
 Expected: 프로세스가 뜨고, 메뉴 막대에 번개 아이콘이 보인다. 충전기가 연결돼 있으면 `SleepDisabled = Yes`가 된다. 메뉴를 열면 상태 줄과 모드 3개가 보인다.
 
-- [ ] **Step 7: 모드 전환과 종료 복원 확인**
+- [ ] **Step 6: 모드 전환과 종료 복원 확인**
 
 메뉴에서 "항상 끔"을 고르고 `ioreg`를 다시 읽어 `No`가 되는지 본다. "자동 전환"으로 되돌린 뒤, 메뉴의 종료를 누르고 다시 읽는다.
 
@@ -668,7 +649,7 @@ pgrep -l ChargerAwareSleep || echo "종료됨"
 
 Expected: 종료 후 `"SleepDisabled" = No`. 프로세스 없음.
 
-- [ ] **Step 8: 커밋**
+- [ ] **Step 7: 커밋**
 
 ```bash
 git add Sources/App.swift Resources/Info.plist build.sh
@@ -700,7 +681,7 @@ import IOKit.ps
 import ServiceManagement
 ```
 
-`Controller` 안, `restoreOnExit()` 바로 앞에 다음을 넣는다:
+`Controller` 안, `apply()` 바로 뒤에 다음을 넣는다:
 
 ```swift
     /// SMAppService 는 macOS 13 이상에서 쓸 수 있다.
@@ -958,7 +939,7 @@ spec 의 미확인 항목 3개를 측정값으로 대체했다.
 | spec 항목 | 태스크 |
 |---|---|
 | 상태 모델 3모드 | Task 1 (`Mode`, `desiredSleepDisabled`), Task 4 (UI) |
-| 종료 시 복원 | Task 4 Step 3 (`restoreOnExit`, `applicationWillTerminate`) |
+| 종료 시 복원 | Task 4 Step 3 (`AppDelegate.applicationWillTerminate`) |
 | 메뉴바 UI | Task 4 Step 3, Task 5 Step 2 |
 | 전원 변경 감지 (이벤트 구독) | Task 4 Step 3 (`subscribeToPowerChanges`), Task 6 Step 2 검증 |
 | 전원 판정 = power source | Task 2 (`powerSource`), Task 1 테스트 |
@@ -967,7 +948,7 @@ spec 의 미확인 항목 3개를 측정값으로 대체했다.
 | 뚜껑 상태 표시용 | Task 2 (`clamshellClosed`), Task 4 (`statusLine`) |
 | sudoers 규칙, 앱이 쓰지 않음 | Task 3 Step 1/3 |
 | `sudo -n` 실패 시 메뉴에 표시 | Task 3 Step 2 (`Result`), Task 4 Step 3 (`errorText`) |
-| Failsafe: 종료 복원 | Task 4 Step 3 |
+| Failsafe: 종료 복원 | Task 4 Step 3 (`applicationWillTerminate`) |
 | Failsafe: 부팅 리셋 (보류) | Task 6 Step 4/6 — 측정 후 결정 |
 | Failsafe: KeepAlive | 의도적 제외. "Spec에서 벗어난 결정" 참조 |
 | 검증: 순수 함수 self-check | Task 1 Step 2, `test.sh` |
@@ -975,4 +956,4 @@ spec 의 미확인 항목 3개를 측정값으로 대체했다.
 
 **Placeholder scan:** 없음. 모든 코드 스텝에 실제 코드가 들어 있다.
 
-**Type consistency:** `desiredSleepDisabled(mode:source:)`, `SystemState.sleepDisabled()`, `SystemState.clamshellClosed()`, `SystemState.powerSource()`, `SleepControl.set(_:)`, `SleepControlError.commandFailed(status:message:)`, `Controller.apply()`, `Controller.refresh()`, `Controller.restoreOnExit()`, `Controller.launchesAtLogin` — 정의와 사용처의 이름·시그니처가 일치한다.
+**Type consistency:** `desiredSleepDisabled(mode:source:)`, `SystemState.sleepDisabled()`, `SystemState.clamshellClosed()`, `SystemState.powerSource()`, `SleepControl.set(_:)`, `SleepControlError.commandFailed(status:message:)`, `Controller.apply()`, `Controller.refresh()`, `Controller.launchesAtLogin` — 정의와 사용처의 이름·시그니처가 일치한다.
