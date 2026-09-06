@@ -11,7 +11,10 @@ enum SleepControl {
 
     /// pmset 의 disablesleep 은 man 페이지에 없는 미문서화 설정이다.
     /// macOS major 업그레이드 때마다 회귀 확인이 필요하다. (spec 실측 05)
-    @discardableResult
+    ///
+    /// @discardableResult 를 붙이지 않는다: 이 타입의 핵심 원칙이 "실패를 조용히
+    /// 삼키지 않는다" 인데 반환값을 버려도 되게 하면 그 반대 문을 여는 셈이다.
+    /// 반환값을 의도적으로 무시해야 하는 호출부는 `_ = SleepControl.set(false)` 로 명시한다.
     static func set(_ disabled: Bool) -> Result<Void, SleepControlError> {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
@@ -20,7 +23,10 @@ enum SleepControl {
 
         let errorPipe = Pipe()
         process.standardError = errorPipe
-        process.standardOutput = Pipe()
+        // pmset 은 stdout 에 거의 쓰지 않지만, Pipe 로 두고 안 읽으면 커널 버퍼가
+        // 차 자식이 write 에서 블록되고 stderr EOF 도 안 와 readDataToEndOfFile() 이
+        // 교착될 수 있다. 아무도 안 읽을 거면 처음부터 버린다.
+        process.standardOutput = FileHandle.nullDevice
 
         do {
             try process.run()

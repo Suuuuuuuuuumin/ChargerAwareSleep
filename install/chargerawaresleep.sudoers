@@ -6,4 +6,14 @@
 #
 # 보안 영향: admin 그룹의 임의 프로세스가 암호 없이 이 명령을 실행할 수 있다.
 # 영향 범위는 잠자기 정책 변경으로 한정된다.
-%admin ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep *
+#
+# 트레일링 와일드카드(disablesleep *)를 쓰지 않는다: sudoers 의 인자 매칭은
+# fnmatch() 전체 문자열 일치이고 * 는 공백까지 포함해 뒤의 모든 문자를 매칭한다.
+# pmset -a 는 "pmset -a k1 v1 k2 v2 ..." 형태의 다중 설정 체이닝을 지원하므로
+# 와일드카드 한 줄이면 hibernatemode, standby, autopoweroff, womp 등 pmset -a 가
+# 다루는 임의 전원 설정을 암호 없이 바꿀 수 있게 된다. 2026-09-07 에
+# `sudo -n pmset -a disablesleep 0 bogus_key_xyz 1` 로 sudo 자체는 통과하고
+# pmset 사용법 오류만 나는 것을 실측으로 확인했다. 그래서 값을 0/1 두 줄로
+# 정확히 고정한다.
+%admin ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0
+%admin ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1
