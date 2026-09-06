@@ -1,5 +1,6 @@
 import SwiftUI
 import IOKit.ps
+import ServiceManagement
 
 @MainActor
 final class Controller: ObservableObject {
@@ -71,16 +72,39 @@ final class Controller: ObservableObject {
         refresh()
     }
 
+    /// SMAppService 는 macOS 13 이상에서 쓸 수 있다.
+    /// 별도 LaunchAgent plist 를 두지 않는다 — 기동 경로가 둘이면 이중 실행이 된다.
+    var launchesAtLogin: Bool {
+        get { SMAppService.mainApp.status == .enabled }
+        set {
+            do {
+                if newValue {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                // 로그인 항목 변경 실패는 사용자 조작에 대한 일시적 피드백이다.
+                // 앱 수명 내내 지속되는 subscriptionErrorText 가 아니라,
+                // 다음 apply() 성공 시 지워지는 applyErrorText 에 담는다.
+                applyErrorText = "로그인 항목 변경 실패: \(error.localizedDescription)"
+            }
+            objectWillChange.send()
+        }
+    }
+
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
-        // Cmd-Q, 메뉴의 종료, launchctl stop, 로그아웃 등 "정상 종료" 경로에서만 복원한다.
+        // Cmd-Q, 메뉴의 종료, 로그아웃 등 "정상 종료" 경로에서만 복원한다.
         // 강제 종료·크래시까지 커버한다고 오해하지 말 것.
         //
         // 증상: 앱이 SIGKILL 되거나 크래시하면 SleepDisabled=1 이 잔류해, 뚜껑을 닫아도
         //       잠들지 않는다. 가방 안에서 방전·발열로 이어진다.
-        // 트리거: 강제 종료, 크래시, 전원 차단.
+        // 트리거: 강제 종료, 크래시, 전원 차단, `launchctl stop` (SIGTERM 을 보낼 뿐이고
+        //       AppKit 이 SIGTERM 을 applicationWillTerminate 로 자동 연결해주지 않는다.
+        //       이 앱엔 SIGTERM 핸들러도 없다 — 복원되지 않는 경로다).
         // 시도했으나 안 되는 것: applicationWillTerminate 는 SIGKILL 을 잡을 수 없다.
         //       OS 소관이다.
         // 최종 결정: 정상 종료 경로만 복원한다. 부팅 시 리셋용 LaunchDaemon 은
@@ -123,6 +147,12 @@ struct ChargerAwareSleepApp: App {
                 } label: {
                     Text(controller.mode == mode ? "● \(mode.label)" : "○ \(mode.label)")
                 }
+            }
+
+            Divider()
+
+            Button(controller.launchesAtLogin ? "☑ 로그인 시 시작" : "☐ 로그인 시 시작") {
+                controller.launchesAtLogin.toggle()
             }
 
             Divider()
