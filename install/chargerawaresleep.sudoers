@@ -1,0 +1,9 @@
+# ChargerAwareSleep — pmset 의 disablesleep 설정만 암호 없이 허용한다.
+# 설치:
+#   sudo install -m 0440 -o root -g wheel \
+#     install/chargerawaresleep.sudoers /etc/sudoers.d/chargerawaresleep
+#   sudo visudo -c -f /etc/sudoers.d/chargerawaresleep
+#
+# 보안 영향: admin 그룹의 임의 프로세스가 암호 없이 이 명령을 실행할 수 있다.
+# 영향 범위는 잠자기 정책 변경으로 한정된다.
+%admin ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep *
