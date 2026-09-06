@@ -20,6 +20,9 @@ final class Controller: ObservableObject {
     /// 구독 실패는 앱이 살아있는 동안 계속되는 상태다 — apply() 가 지워선 안 된다.
     /// (재시도 로직이 없으므로 프로세스 수명 동안 고정값이다.)
     @Published private(set) var subscriptionErrorText: String?
+    /// 로그인 항목 등록·해제 실패. 사용자 조작에 대한 피드백이라 다음 조작(재시도) 때까지
+    /// 유지되고, apply() 의 전원 이벤트에 지워지지 않는다 — applyErrorText 와 도메인이 다르다.
+    @Published private(set) var loginItemErrorText: String?
 
     /// 구독을 유지하기 위해 붙잡아 둔다. 놓으면 알림이 끊긴다.
     private var runLoopSource: CFRunLoopSource?
@@ -83,11 +86,13 @@ final class Controller: ObservableObject {
                 } else {
                     try SMAppService.mainApp.unregister()
                 }
+                // 재시도로 성공했으면 이전 실패 메시지를 남겨두지 않는다.
+                loginItemErrorText = nil
             } catch {
-                // 로그인 항목 변경 실패는 사용자 조작에 대한 일시적 피드백이다.
-                // 앱 수명 내내 지속되는 subscriptionErrorText 가 아니라,
-                // 다음 apply() 성공 시 지워지는 applyErrorText 에 담는다.
-                applyErrorText = "로그인 항목 변경 실패: \(error.localizedDescription)"
+                // SleepControl(pmset) 실패 전용인 applyErrorText 에 담으면 안 된다 —
+                // sudoers 힌트가 무관하게 같이 뜨고, 전원 이벤트로 apply() 가 도는 사이
+                // 사용자가 보기도 전에 지워질 수 있다. 전용 필드에 담는다.
+                loginItemErrorText = "로그인 항목 변경 실패: \(error.localizedDescription)"
             }
             objectWillChange.send()
         }
@@ -139,6 +144,12 @@ struct ChargerAwareSleepApp: App {
                 Text("sudoers 규칙이 설치됐는지 확인하세요")
             }
 
+            if let loginItemErrorText = controller.loginItemErrorText {
+                Divider()
+                Text("오류: \(loginItemErrorText)")
+                Text("시스템 설정 > 일반 > 로그인 항목 에서 확인하세요")
+            }
+
             Divider()
 
             ForEach(Mode.allCases, id: \.self) { mode in
@@ -154,8 +165,6 @@ struct ChargerAwareSleepApp: App {
             Button(controller.launchesAtLogin ? "☑ 로그인 시 시작" : "☐ 로그인 시 시작") {
                 controller.launchesAtLogin.toggle()
             }
-
-            Divider()
 
             Button("종료 (잠자기 복원됨)") {
                 NSApplication.shared.terminate(nil)
