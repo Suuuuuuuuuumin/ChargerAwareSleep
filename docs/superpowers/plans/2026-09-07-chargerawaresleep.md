@@ -14,7 +14,8 @@
 
 - 타겟: `arm64-apple-macos13.0`. `MenuBarExtra`와 `SMAppService`가 macOS 13 이상을 요구한다.
 - Xcode가 없다. `xcodebuild`를 쓰지 않는다. 빌드는 `swiftc` + 수제 번들, 서명은 ad-hoc(`codesign -s -`).
-- `Sources/`의 파일은 4개를 넘기지 않는다: `Policy.swift`, `SystemState.swift`, `SleepControl.swift`, `App.swift`.
+- `Sources/`의 파일은 5개를 넘기지 않는다: `Policy.swift`, `SystemState.swift`, `SleepControl.swift`, `App.swift`, `LidWatcher.swift`.
+  (2026-09-07 상한 4→5. Task 6 검증 중 `disablesleep` 만으로는 패널이 꺼지지 않는 것이 확인돼 뚜껑 개폐 구독이 범위에 들어왔다 — spec 실측 02 정정·09 참조.)
 - 테스트는 프레임워크 없이 `assert` 기반이다. `assert`는 `-O`에서 제거되므로 테스트 빌드는 반드시 `-Onone`으로 한다.
 - 앱 실행 파일 빌드는 `-O -parse-as-library`를 쓴다. `-parse-as-library` 없이는 `@main`이 "top-level code" 오류로 실패한다.
 - 전원 판정은 charging 여부가 아니라 공급원으로 한다. 기준값은 `kIOPSACPowerValue`("AC Power")다. (spec 실측 04)
@@ -45,6 +46,7 @@
 | `Sources/SystemState.swift` | IORegistry·IOPS 읽기. 권한 불필요, 쓰기 없음 |
 | `Sources/SleepControl.swift` | `sudo pmset`로 `disablesleep` 쓰기. 유일한 쓰기 경로 |
 | `Sources/App.swift` | `MenuBarExtra` UI, `Controller`, 전원 변경 구독, 종료 복원 |
+| `Sources/LidWatcher.swift` | `IOPMrootDomain` 뚜껑 개폐 구독. 전이만 알리고 정책은 정하지 않는다 |
 | `Tests/PolicyTests.swift` | `assert` 기반 self-check. `Policy.swift`만 의존 |
 | `Resources/Info.plist` | 번들 메타데이터, `LSUIElement` |
 | `build.sh` / `test.sh` | 빌드·테스트 진입점 |
