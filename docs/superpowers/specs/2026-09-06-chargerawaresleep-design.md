@@ -140,6 +140,27 @@ ioreg -r -k AppleClamshellState → "AppleClamshellState" = Yes(닫힘) / No(열
 주의: `pmset -g assertions`의 `com.apple.powermanagement.lidopen` assertion은
 뚜껑을 닫아도 남아 있어 개폐 판정에 쓸 수 없다.
 
+### 9. (2026-09-07 추가) 뚜껑 닫힘 이벤트 구독과 패널 소등이 동작한다
+
+`IOPMrootDomain`에 `IOServiceAddInterestNotification(kIOGeneralInterest)`로 구독하면 뚜껑 개폐가
+이벤트로 온다. 콜백에서 `AppleClamshellState`를 다시 읽어 전이를 판정한다. polling이 필요 없다.
+측정에서 이벤트가 1초 폴링보다 항상 먼저 도착했다.
+
+```
+11:39:08  뚜껑 닫힘  msgType=0xe0034100
+11:39:09  [폴링] 뚜껑 닫힘
+```
+
+뚜껑이 닫힌 **뒤에** `pmset displaysleepnow`를 호출하면 패널이 실제로 꺼지고, 입력이 없는 동안
+유지된다. 2026-09-07에 뚜껑을 36초 닫아두고(11:41:42~11:42:18) 살짝 열어 눈으로 확인했다.
+
+**재진입 주의.** `Process.waitUntilExit()`는 런루프를 돌리므로 콜백이 재진입한다. 상태 갱신을
+작업보다 뒤에 두면 매번 통과해 중복 실행된다. 실제로 한 번의 뚜껑 닫힘에 `displaysleepnow`가
+5번 발사됐다. 상태를 먼저 갱신하고, 콜백 안에서 `waitUntilExit()`를 부르지 않는다.
+
+**판정에 로그를 쓰지 말 것.** `pmset -g log`의 `Display is turned off`는 `displaysleepnow` 없이
+그냥 뚜껑을 닫아도 똑같이 찍힌다(11:39:08). 패널 소등 여부를 구분하지 못한다. 위 2번 참조.
+
 ### 8. 툴체인
 
 Xcode 미설치, CommandLineTools만 있음 → `xcodebuild` 사용 불가.
@@ -157,8 +178,9 @@ Xcode 미설치, CommandLineTools만 있음 → `xcodebuild` 사용 불가.
 제외:
 - idle sleep 관리. 현재 AC에서 `sleep 0`이라 이미 잠들지 않고, 배터리에서
   잠들지 않게 만드는 것은 방전을 부른다. Amphetamine의 이 기능은 대체하지 않는다.
-- 뚜껑 상태에 따른 동작 분기. `disablesleep`은 뚜껑을 닫을 때만 의미가 있으므로
-  뚜껑 상태를 볼 필요가 없다. `AppleClamshellState`는 메뉴 표시용으로만 쓴다.
+(2026-09-07 정정) "뚜껑 상태에 따른 동작 분기"는 제외 항목이 아니다. 원래는 뚜껑 상태를 볼
+필요가 없다고 봤으나, `disablesleep`만으로는 패널이 꺼지지 않는다는 것이 확인됐다(위 2번).
+뚜껑 닫힘을 감지해 `pmset displaysleepnow`를 호출하는 것이 범위에 포함된다(위 9번).
 
 ## 상태 모델
 
@@ -211,7 +233,9 @@ Xcode 미설치, CommandLineTools만 있음 → `xcodebuild` 사용 불가.
 | 전원 판정 | `IOPSGetProvidingPowerSourceType() == kIOPMACPowerKey` |
 | 상태 읽기 | `IOPMrootDomain`의 `SleepDisabled` (IORegistry, 권한 불필요) |
 | 상태 쓰기 | `/usr/bin/sudo -n /usr/bin/pmset -a disablesleep <0\|1>` |
-| 뚜껑 상태 (표시용) | `IOPMrootDomain`의 `AppleClamshellState` |
+| 뚜껑 상태 | `IOPMrootDomain`의 `AppleClamshellState` |
+| 뚜껑 개폐 감지 | `IOServiceAddInterestNotification(kIOGeneralInterest)` on `IOPMrootDomain` |
+| 패널 소등 | `/usr/bin/pmset displaysleepnow` (권한 불필요) |
 | UI | SwiftUI `MenuBarExtra` |
 
 경계: 전원 감지 / 정책 결정 / `pmset` 실행이 각각 분리돼야 정책 로직을
