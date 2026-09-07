@@ -20,6 +20,9 @@ final class Controller: ObservableObject {
     /// 구독 실패는 앱이 살아있는 동안 계속되는 상태다 — apply() 가 지워선 안 된다.
     /// (재시도 로직이 없으므로 프로세스 수명 동안 고정값이다.)
     @Published private(set) var subscriptionErrorText: String?
+    /// 패널 소등(pmset displaysleepnow) 실패. sudo 를 타지 않으므로 sudoers 힌트를 붙이면
+    /// 안 된다 — applyErrorText 와 도메인이 다르다. (Task 5 판정과 같은 이유)
+    @Published private(set) var displayErrorText: String?
     /// 로그인 항목 등록·해제 실패. 사용자 조작에 대한 피드백이라 다음 조작(재시도) 때까지
     /// 유지되고, apply() 의 전원 이벤트에 지워지지 않는다 — applyErrorText 와 도메인이 다르다.
     @Published private(set) var loginItemErrorText: String?
@@ -27,13 +30,25 @@ final class Controller: ObservableObject {
     /// 구독을 유지하기 위해 붙잡아 둔다. 놓으면 알림이 끊긴다.
     private var runLoopSource: CFRunLoopSource?
 
+    /// 뚜껑 개폐 구독. 소유권을 놓으면 알림이 끊긴다.
+    private let lidWatcher = LidWatcher()
+
     init() {
         let raw = UserDefaults.standard.string(forKey: "mode") ?? Mode.auto.rawValue
         mode = Mode(rawValue: raw) ?? .auto
         if !subscribeToPowerChanges() {
-            subscriptionErrorText = "전원 변경 감지를 시작하지 못했습니다. 자동 전환이 동작하지 않습니다."
+            noteSubscriptionFailure("전원 변경 감지를 시작하지 못했습니다. 자동 전환이 동작하지 않습니다.")
+        }
+        lidWatcher.onChange = { [weak self] closed in self?.handleLidChange(closed) }
+        if !lidWatcher.start() {
+            noteSubscriptionFailure("뚜껑 감지를 시작하지 못했습니다. 뚜껑을 닫아도 화면이 꺼지지 않습니다.")
         }
         apply()
+    }
+
+    /// 구독은 재시도하지 않으므로 실패가 겹치면 둘 다 보여야 한다. 덮어쓰지 않고 쌓는다.
+    private func noteSubscriptionFailure(_ text: String) {
+        subscriptionErrorText = [subscriptionErrorText, text].compactMap { $0 }.joined(separator: "\n")
     }
 
     /// polling 하지 않는다. 전원 상태가 바뀔 때만 깨어난다.
@@ -73,6 +88,20 @@ final class Controller: ObservableObject {
             applyErrorText = message
         }
         refresh()
+    }
+
+    /// 뚜껑이 열리거나 닫힐 때만 호출된다 — polling 이 아니다.
+    /// 여는 쪽은 할 일이 없다. macOS 가 알아서 화면을 켠다.
+    private func handleLidChange(_ closed: Bool) {
+        // 앱이 기억하는 값이 아니라 커널의 실제 값으로 판단한다.
+        refresh()
+        guard shouldTurnOffDisplay(lidClosed: closed, sleepDisabled: sleepDisabled) else { return }
+        switch SleepControl.displaySleepNow() {
+        case .success:
+            displayErrorText = nil
+        case .failure(.commandFailed(_, let message)):
+            displayErrorText = message
+        }
     }
 
     /// SMAppService 는 macOS 13 이상에서 쓸 수 있다.
@@ -142,6 +171,11 @@ struct ChargerAwareSleepApp: App {
                 Divider()
                 Text("오류: \(applyErrorText)")
                 Text("sudoers 규칙이 설치됐는지 확인하세요")
+            }
+
+            if let displayErrorText = controller.displayErrorText {
+                Divider()
+                Text("오류: 화면 끄기 실패 — \(displayErrorText)")
             }
 
             if let loginItemErrorText = controller.loginItemErrorText {

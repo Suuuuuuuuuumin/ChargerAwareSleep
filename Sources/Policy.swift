@@ -32,3 +32,12 @@ func desiredSleepDisabled(mode: Mode, source: PowerSource) -> Bool {
     case .auto:      return source == .ac
     }
 }
+
+/// 뚜껑을 닫았을 때 패널을 직접 꺼야 하는가.
+///
+/// disablesleep 은 시스템 잠자기만 막고 패널 소등과는 별개 경로다. 이 머신은
+/// displaysleep 이 0(never)이라 뚜껑을 닫아도 패널이 영원히 켜져 있다. (spec 실측 02, 2026-09-07)
+/// 잠자기가 살아 있으면 clamshell sleep 이 알아서 화면까지 끄므로 개입하지 않는다.
+func shouldTurnOffDisplay(lidClosed: Bool, sleepDisabled: Bool) -> Bool {
+    lidClosed && sleepDisabled
+}
