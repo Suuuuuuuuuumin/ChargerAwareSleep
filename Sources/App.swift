@@ -212,7 +212,7 @@ struct ChargerAwareSleepApp: App {
     /// (2026-09-07 실측: .font(.system(size: 18)) 을 줘도 잉크 높이가 13.0pt 그대로였다)
     /// 심볼을 직접 렌더해 NSImage 로 넘긴다.
     private static func menuBarIcon(_ sleepDisabled: Bool) -> NSImage {
-        let image = sleepDisabled ? openEye() : closedEye()
+        let image = trimmed(sleepDisabled ? openEye() : closedEye())
         // 템플릿으로 두면 메뉴바 색(라이트/다크)을 시스템이 칠한다.
         image.isTemplate = true
         image.accessibilityDescription = sleepDisabled ? "잠자기 비활성" : "잠자기 활성"
@@ -249,6 +249,49 @@ struct ChargerAwareSleepApp: App {
             // NSImage 좌표는 왼쪽 아래가 원점이라, 아래쪽 keep 만큼이 눈꺼풀이다.
             brow.draw(in: rect, from: NSRect(x: 0, y: 0, width: full.width, height: keep),
                       operation: .sourceOver, fraction: 1)
+            return true
+        }
+    }
+
+    /// 이미지에서 투명한 가장자리를 잘라 잉크에 딱 맞춘다.
+    ///
+    /// 심볼마다 그림이 박스 안에 놓이는 위치가 달라, 그대로 쓰면 두 상태의 아이콘이
+    /// 서로 다른 자리에 그려진다. 메뉴바는 항목을 오른쪽부터 쌓으므로 잉크 오른쪽
+    /// 여백이 넓은 쪽이 왼쪽으로 밀려 보인다. (2026-09-07 실측: 감은 눈은 우여백
+    /// 5.75pt, 뜬 눈은 2.75pt 로 3pt 어긋났다 — 눈으로도 보인다.)
+    ///
+    /// 잘라내면 메뉴바가 붙이는 여백만 남아 두 상태가 같은 자리에 온다.
+    private static func trimmed(_ image: NSImage) -> NSImage {
+        let size = image.size
+        let scale = 2.0   // 레티나 기준. 잉크 경계만 찾으므로 이 이상은 낭비다.
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(ceil(size.width * scale)), pixelsHigh: Int(ceil(size.height * scale)),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return image }
+        rep.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        image.draw(in: NSRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+
+        var minX = rep.pixelsWide, maxX = -1, minY = rep.pixelsHigh, maxY = -1
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.35 {
+                minX = min(minX, x); maxX = max(maxX, x)
+                minY = min(minY, y); maxY = max(maxY, y)
+            }
+        }
+        // 잉크가 없으면(심볼 로드 실패 등) 원본을 그대로 돌려준다.
+        guard maxX >= minX, maxY >= minY else { return image }
+
+        // rep 은 위가 원점, NSImage 는 아래가 원점이라 y 를 뒤집어 잘라낸다.
+        let box = NSRect(x: Double(minX) / scale,
+                         y: size.height - Double(maxY + 1) / scale,
+                         width: Double(maxX - minX + 1) / scale,
+                         height: Double(maxY - minY + 1) / scale)
+        return NSImage(size: box.size, flipped: false) { rect in
+            image.draw(in: rect, from: box, operation: .sourceOver, fraction: 1)
             return true
         }
     }
