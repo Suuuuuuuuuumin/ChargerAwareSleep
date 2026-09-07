@@ -130,15 +130,29 @@ final class Controller: ObservableObject {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// SIGTERM 을 잡아 두는 동안만 살아 있으면 된다. 해제하면 구독이 끊긴다.
+    private var sigterm: DispatchSourceSignal?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // AppKit 은 SIGTERM 을 applicationWillTerminate 로 연결해주지 않는다
+        // (2026-09-07 실측: `pkill -x ChargerAwareSleep` 뒤 SleepDisabled 가 Yes 로 남았다).
+        // `launchctl stop`, 로그아웃 도중의 강제 종료, 설치 스크립트가 모두 이 경로다.
+        // 기본 동작(즉시 죽음)을 끄고 정상 종료로 돌려 복원 경로를 태운다.
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        source.setEventHandler { NSApp.terminate(nil) }
+        source.resume()
+        sigterm = source
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Cmd-Q, 메뉴의 종료, 로그아웃 등 "정상 종료" 경로에서만 복원한다.
         // 강제 종료·크래시까지 커버한다고 오해하지 말 것.
         //
         // 증상: 앱이 SIGKILL 되거나 크래시하면 SleepDisabled=1 이 잔류해, 뚜껑을 닫아도
         //       잠들지 않는다. 가방 안에서 방전·발열로 이어진다.
-        // 트리거: 강제 종료, 크래시, 전원 차단, `launchctl stop` (SIGTERM 을 보낼 뿐이고
-        //       AppKit 이 SIGTERM 을 applicationWillTerminate 로 자동 연결해주지 않는다.
-        //       이 앱엔 SIGTERM 핸들러도 없다 — 복원되지 않는 경로다).
+        // 트리거: 강제 종료(SIGKILL), 크래시, 전원 차단. SIGTERM 은
+        //       applicationDidFinishLaunching 의 핸들러가 정상 종료로 돌려 이 경로를 탄다.
         // 시도했으나 안 되는 것: applicationWillTerminate 는 SIGKILL 을 잡을 수 없다.
         //       OS 소관이다.
         // 최종 결정: 정상 종료 경로만 복원한다. 부팅 시 리셋용 LaunchDaemon 은
