@@ -233,8 +233,8 @@ struct ChargerAwareSleepApp: App {
         return image
     }
 
-    /// 속눈썹 선 굵기(pt). 눈 획(semibold)과 눈으로 맞춘 값이다 (2026-09-07).
-    private static let lashWidth = 2.0
+    /// 속눈썹 선 굵기(pt). 눈 획(regular)과 눈으로 맞춘 값이다 (2026-09-07).
+    private static let lashWidth = 1.3
 
     /// 감은 눈을 공용 캔버스 한가운데에서 얼마나 옮길지 (pt, +y 는 위).
     ///
@@ -253,11 +253,11 @@ struct ChargerAwareSleepApp: App {
     /// pointSize 19 는 실측이다 (2026-09-07): 메뉴바에서 이웃 아이콘과 높이가 같다.
     /// 기본 크기로 두면 잉크가 13.0pt 라 혼자 작아 보인다.
     ///
-    /// weight 는 semibold, 나머지 수(개수 4 · 길이 2.3 · 퍼짐 1.60)는 스튜디오에서 눈으로
+    /// weight 는 regular, 나머지 수(개수 4 · 길이 2.3 · 퍼짐 1.60)는 스튜디오에서 눈으로
     /// 고른 값이다 (2026-09-07). 겹침 0.8 은 실측이다: 0.4 면 바깥 두 속눈썹이 눈에서
     /// 떠 보이고, 1.2 이상이면 안쪽 속눈썹이 눈꺼풀 선을 뚫고 들어온다.
     private static func eyeAndLashes() -> (eye: NSImage, lashes: [(CGPoint, CGPoint)]) {
-        guard let raw = symbol("eye", pointSize: 19, weight: .semibold) else { return (NSImage(), []) }
+        guard let raw = symbol("eye", pointSize: 19, weight: .regular) else { return (NSImage(), []) }
         let eye = trimmed(raw)
         let a = eye.size.width / 2, b = eye.size.height / 2
         let count = 4, spread = 1.60, length = 2.3, overlap = 0.8, yShift = 0.1
@@ -332,7 +332,7 @@ struct ChargerAwareSleepApp: App {
     /// y 12.0~18.25pt 이고 그 사이 y 9.75~11.75pt 가 완전히 비어 있다. 심볼 높이(20pt)
     /// 기준으로 그 빈 띠 아래가 46% 지점이다.
     ///
-    /// pointSize 29 는 뜬 눈과 폭을 맞춘 값이다. weight 는 light — eyebrow 를 크게 뽑아
+    /// pointSize 29 는 뜬 눈과 폭을 맞춘 값이다. weight 는 thin — eyebrow 를 크게 뽑아
     /// 쓰는 탓에 같은 weight 면 눈꺼풀 획만 유독 두껍다. 두 상태의 획을 눈으로 맞췄다
     /// (2026-09-07).
     ///
@@ -340,7 +340,7 @@ struct ChargerAwareSleepApp: App {
     /// 증상은 눈썹이 남거나 속눈썹이 잘리는 것뿐이고 동작에는 영향이 없다. 틀어지면
     /// 심볼을 다시 렌더해 빈 띠 위치를 재고 두 상수만 고친다.
     private static func lidImage() -> NSImage? {
-        guard let brow = symbol("eyebrow", pointSize: 29, weight: .light) else { return nil }
+        guard let brow = symbol("eyebrow", pointSize: 29, weight: .thin) else { return nil }
         let full = brow.size
         let keep = full.height * 0.46
         // NSImage 좌표는 왼쪽 아래가 원점이라, 아래쪽 keep 만큼이 눈꺼풀이다.
