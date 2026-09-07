@@ -212,11 +212,16 @@ struct ChargerAwareSleepApp: App {
     /// (2026-09-07 실측: .font(.system(size: 18)) 을 줘도 잉크 높이가 13.0pt 그대로였다)
     /// 심볼을 직접 렌더해 NSImage 로 넘긴다.
     private static func menuBarIcon(_ sleepDisabled: Bool) -> NSImage {
-        let name = sleepDisabled ? "bolt.circle.fill" : "bolt.circle"
-        // pointSize 16 = 이웃 메뉴바 아이콘과 같은 잉크 높이 16.0pt.
-        // 2026-09-07 실측: 기본값은 13.0pt 로 이웃(16.0pt)보다 눈에 띄게 작았다.
-        // 이 심볼은 원형이라 잉크 높이가 pointSize 와 1:1 로 맞는다 (18 → 18.0pt 확인).
-        let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
+        // 뜬 눈 = 시스템이 깨어 있음, 감은 눈 = 평소대로 잘 수 있음.
+        // eye.closed 는 이 SF Symbols 버전에 없다 (2026-09-07 확인). eyebrow 가
+        // 눈썹 + 감은 눈꺼풀 + 속눈썹 형태라 감은 눈 역할을 한다.
+        let name = sleepDisabled ? "eye.fill" : "eyebrow"
+        // pointSize 19 는 실측으로 정했다 (2026-09-07). 이웃 메뉴바 아이콘의 잉크 높이가
+        // 16.0pt 인데, 기본 크기로 두면 13.0pt 로 혼자 작아 보인다.
+        // 19 에서 eyebrow 는 16.5pt, eye.fill 은 15.8pt — 두 상태의 높이가 거의 같다.
+        // 심볼마다 비율이 달라 pointSize 와 잉크 높이는 1:1 이 아니다. 크기를 바꾸려면
+        // 눈대중 말고 두 심볼을 같이 재서 높이를 맞출 것.
+        let config = NSImage.SymbolConfiguration(pointSize: 19, weight: .regular)
         let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(config) ?? NSImage()
         // 템플릿으로 두면 메뉴바 색(라이트/다크)을 시스템이 칠한다.
