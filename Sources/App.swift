@@ -212,21 +212,50 @@ struct ChargerAwareSleepApp: App {
     /// (2026-09-07 실측: .font(.system(size: 18)) 을 줘도 잉크 높이가 13.0pt 그대로였다)
     /// 심볼을 직접 렌더해 NSImage 로 넘긴다.
     private static func menuBarIcon(_ sleepDisabled: Bool) -> NSImage {
-        // 뜬 눈 = 시스템이 깨어 있음, 감은 눈 = 평소대로 잘 수 있음.
-        // eye.closed 는 이 SF Symbols 버전에 없다 (2026-09-07 확인). eyebrow 가
-        // 눈썹 + 감은 눈꺼풀 + 속눈썹 형태라 감은 눈 역할을 한다.
-        let name = sleepDisabled ? "eye.fill" : "eyebrow"
-        // pointSize 19 는 실측으로 정했다 (2026-09-07). 이웃 메뉴바 아이콘의 잉크 높이가
-        // 16.0pt 인데, 기본 크기로 두면 13.0pt 로 혼자 작아 보인다.
-        // 19 에서 eyebrow 는 16.5pt, eye.fill 은 15.8pt — 두 상태의 높이가 거의 같다.
-        // 심볼마다 비율이 달라 pointSize 와 잉크 높이는 1:1 이 아니다. 크기를 바꾸려면
-        // 눈대중 말고 두 심볼을 같이 재서 높이를 맞출 것.
-        let config = NSImage.SymbolConfiguration(pointSize: 19, weight: .regular)
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(config) ?? NSImage()
+        let image = sleepDisabled ? openEye() : closedEye()
         // 템플릿으로 두면 메뉴바 색(라이트/다크)을 시스템이 칠한다.
         image.isTemplate = true
+        image.accessibilityDescription = sleepDisabled ? "잠자기 비활성" : "잠자기 활성"
         return image
+    }
+
+    /// 뜬 눈 = 시스템이 깨어 있음.
+    /// pointSize 19 는 실측이다 (2026-09-07): 잉크 25.2 x 15.8pt, 메뉴바에서 높이 16.0pt 로
+    /// 이웃 아이콘과 같다. 기본 크기로 두면 13.0pt 라 혼자 작아 보인다.
+    private static func openEye() -> NSImage {
+        symbol("eye.fill", pointSize: 19) ?? NSImage()
+    }
+
+    /// 감은 눈 = 평소대로 잘 수 있음.
+    ///
+    /// eye.closed 는 이 SF Symbols 버전에 없다 (2026-09-07 확인). eyebrow 가
+    /// [눈썹 · 빈 띠 · 감은 눈꺼풀+속눈썹] 구성이라 아래쪽만 잘라 눈꺼풀로 쓴다.
+    ///
+    /// 0.46 은 실측이다 (2026-09-07): pointSize 19 에서 눈썹은 y 2.0~9.5pt, 눈꺼풀은
+    /// y 12.0~18.25pt 이고 그 사이 y 9.75~11.75pt 가 완전히 비어 있다. 심볼 높이(20pt)
+    /// 기준으로 그 빈 띠 아래가 46% 지점이다.
+    ///
+    /// pointSize 31 도 실측이다: 잉크 25.5 x 10.5pt 로 뜬 눈의 폭(25.2pt)과 맞는다.
+    /// 상태가 바뀔 때 아이콘 폭이 달라지면 옆의 메뉴바 항목들이 밀린다.
+    ///
+    /// ponytail: macOS 업데이트로 eyebrow 심볼 모양이 바뀌면 이 비율이 틀어진다.
+    /// 증상은 눈썹이 남거나 속눈썹이 잘리는 것뿐이고 동작에는 영향이 없다. 틀어지면
+    /// 심볼을 다시 렌더해 빈 띠 위치를 재고 두 상수만 고친다.
+    private static func closedEye() -> NSImage {
+        guard let brow = symbol("eyebrow", pointSize: 31) else { return NSImage() }
+        let full = brow.size
+        let keep = full.height * 0.46
+        return NSImage(size: NSSize(width: full.width, height: keep), flipped: false) { rect in
+            // NSImage 좌표는 왼쪽 아래가 원점이라, 아래쪽 keep 만큼이 눈꺼풀이다.
+            brow.draw(in: rect, from: NSRect(x: 0, y: 0, width: full.width, height: keep),
+                      operation: .sourceOver, fraction: 1)
+            return true
+        }
+    }
+
+    private static func symbol(_ name: String, pointSize: CGFloat) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: pointSize, weight: .regular))
     }
 
     /// 앱이 믿는 값이 아니라 IORegistry 에서 읽은 실제 값을 보여준다.
