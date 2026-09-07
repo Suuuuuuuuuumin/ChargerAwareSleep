@@ -204,8 +204,24 @@ struct ChargerAwareSleepApp: App {
                 NSApplication.shared.terminate(nil)
             }
         } label: {
-            Image(systemName: controller.sleepDisabled ? "bolt.fill" : "bolt.slash")
+            Image(nsImage: Self.menuBarIcon(controller.sleepDisabled))
         }
+    }
+
+    /// 메뉴바 아이콘. MenuBarExtra 는 Image 에 붙인 .font/.imageScale 을 무시하므로
+    /// (2026-09-07 실측: .font(.system(size: 18)) 을 줘도 잉크 높이가 13.0pt 그대로였다)
+    /// 심볼을 직접 렌더해 NSImage 로 넘긴다.
+    private static func menuBarIcon(_ sleepDisabled: Bool) -> NSImage {
+        let name = sleepDisabled ? "bolt.circle.fill" : "bolt.circle"
+        // pointSize 16 = 이웃 메뉴바 아이콘과 같은 잉크 높이 16.0pt.
+        // 2026-09-07 실측: 기본값은 13.0pt 로 이웃(16.0pt)보다 눈에 띄게 작았다.
+        // 이 심볼은 원형이라 잉크 높이가 pointSize 와 1:1 로 맞는다 (18 → 18.0pt 확인).
+        let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config) ?? NSImage()
+        // 템플릿으로 두면 메뉴바 색(라이트/다크)을 시스템이 칠한다.
+        image.isTemplate = true
+        return image
     }
 
     /// 앱이 믿는 값이 아니라 IORegistry 에서 읽은 실제 값을 보여준다.
