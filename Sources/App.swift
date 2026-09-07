@@ -253,14 +253,14 @@ struct ChargerAwareSleepApp: App {
     /// pointSize 19 는 실측이다 (2026-09-07): 메뉴바에서 이웃 아이콘과 높이가 같다.
     /// 기본 크기로 두면 잉크가 13.0pt 라 혼자 작아 보인다.
     ///
-    /// weight 는 regular, 나머지 수(개수 4 · 길이 2.3 · 퍼짐 1.60)는 스튜디오에서 눈으로
+    /// weight 는 regular, 나머지 수(개수 4 · 길이 1.8 · 퍼짐 1.60)는 스튜디오에서 눈으로
     /// 고른 값이다 (2026-09-07). 겹침 0.8 은 실측이다: 0.4 면 바깥 두 속눈썹이 눈에서
     /// 떠 보이고, 1.2 이상이면 안쪽 속눈썹이 눈꺼풀 선을 뚫고 들어온다.
     private static func eyeAndLashes() -> (eye: NSImage, lashes: [(CGPoint, CGPoint)]) {
         guard let raw = symbol("eye", pointSize: 19, weight: .regular) else { return (NSImage(), []) }
         let eye = trimmed(raw)
         let a = eye.size.width / 2, b = eye.size.height / 2
-        let count = 4, spread = 1.60, length = 2.3, overlap = 0.8, yShift = 0.1
+        let count = 4, spread = 1.60, length = 1.8, overlap = 0.8, yShift = 0.1
 
         let lashes = (0..<count).map { i -> (CGPoint, CGPoint) in
             // 위쪽 눈꺼풀 호를 spread 만큼 훑으며 등간격으로 뿌린다.
