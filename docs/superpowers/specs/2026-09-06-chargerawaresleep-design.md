@@ -31,7 +31,37 @@ MacBook은 뚜껑을 닫으면 즉시 잠든다(clamshell sleep). 충전기가 �
 재현: `sudo pmset -a disablesleep 1` 후 뚜껑을 닫고,
 `while :; do date; sleep 2; done > log` 의 출력에 구멍이 생기는지 본다.
 
-### 2. `disablesleep=1`이어도 내부 패널은 정상적으로 꺼진다
+### 2. (정정됨 2026-09-07) `disablesleep=1`이면 내부 패널이 꺼지지 않는다
+
+**아래 원래 항목은 틀렸다. 사용자의 직접 관찰로 뒤집혔다.**
+
+2026-09-07 새벽, 앱을 켠 채 충전기를 연결하고 뚜껑을 닫았을 때 내부 패널이 계속 켜져 있는 것을
+사용자가 눈으로 확인했다. 시스템은 정상적으로 깨어 있었다(타임스탬프 로그 3분 20초 구멍 없음).
+
+원래 판정의 근거였던 `pmset -g log`의 `Display is turned off` 알림은 패널 소등의 신뢰할 수 있는
+지표가 아니다. 같은 날 다음 두 지표도 무효로 확인됐다. 다시 시도하지 말 것:
+
+- `IOMobileFramebufferAP`의 `CurrentPowerState` — `pmset displaysleepnow`로 화면을 껐는데도
+  값이 `1`로 고정이었다.
+- `AppleSmartBattery`의 `FilteredPower` — 화면을 꺼도 값이 변하지 않았다. 장기 평균이라
+  수십 초 단위 판별에 쓸 수 없다. `InstantAmperage`는 AC 연결 시 항상 `0`이다.
+
+원인은 `disablesleep`이 아니라 디스플레이 idle sleep 설정이다:
+
+```
+pmset -g custom → Battery/AC 둘 다  displaysleep 0
+```
+
+뚜껑을 닫으면 입력이 없으니 원래는 idle 타이머가 패널을 끈다. 그 값이 `0`(never)이라 영원히
+꺼지지 않는다. `disablesleep`은 시스템 잠자기만 막을 뿐 패널 소등과는 별개 경로다.
+
+대응은 뚜껑 닫힘을 감지해 `pmset displaysleepnow`를 호출하는 것이다. 아래 5번 참조.
+
+---
+
+원래 항목 (틀림, 기록용으로만 남김):
+
+### 2. ~~`disablesleep=1`이어도 내부 패널은 정상적으로 꺼진다~~
 
 뚜껑을 닫는 순간 `Display is turned off`가 뜬다:
 
@@ -43,7 +73,17 @@ MacBook은 뚜껑을 닫으면 즉시 잠든다(clamshell sleep). 충전기가 �
 즉 "본체는 깨어 있고 패널만 꺼진 상태"가 `disablesleep`만으로 성립한다.
 `pmset displaysleepnow` 호출도, 전역 `displaysleep` 값 변경도 필요 없다.
 
-### 3. 패널이 계속 켜져 있던 원인은 Amphetamine이었다
+### 3. (정정됨 2026-09-07) Amphetamine은 원인의 전부가 아니었다
+
+Amphetamine을 제거한 뒤에도 패널은 계속 켜져 있다(2번 참조). Amphetamine의
+`PreventUserIdleDisplaySleep` assertion은 패널 소등을 막는 여러 요인 중 하나였을 뿐이고,
+`displaysleep 0` 설정이 남아 있는 한 제거만으로는 해결되지 않는다.
+
+---
+
+원래 항목 (부분적으로만 맞음):
+
+### 3. ~~패널이 계속 켜져 있던 원인은 Amphetamine이었다~~
 
 Amphetamine 세션이 켜져 있으면 `PreventUserIdleDisplaySleep` assertion을 잡고,
 이 상태에서는 뚜껑을 닫아도 `Display is turned off`가 발생하지 않는다.
@@ -70,6 +110,11 @@ Now drawing from 'AC Power'
 |---|---|---|
 | `pmset -a disablesleep <0\|1>` | 없음 (미문서화) | 필요 |
 | `pmset displaysleepnow` | 있음 | 불필요 |
+
+`displaysleepnow`는 2026-09-06에 실행해 확인했다: `exit=0`, 암호 요구 없음,
+`Display is turned off` 즉시 기록. 효과는 입력이 없는 동안 유지된다(20:54:40~20:58:44, 4분).
+단, 호출 직후 입력이 있으면 즉시 취소된다(20:54:22에 off→on이 같은 초에 발생).
+따라서 뚜껑이 닫힌 **뒤에** 호출해야 한다.
 
 `disablesleep`이 미문서화라는 점은 감수한다. Amphetamine 같은 서드파티의 비공개
 API보다는 표면적이 작지만, Apple이 보장한 인터페이스는 아니다. macOS major
