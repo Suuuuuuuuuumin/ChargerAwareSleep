@@ -260,7 +260,7 @@ struct ChargerAwareSleepApp: App {
         guard let raw = symbol("eye", pointSize: 19, weight: .regular) else { return (NSImage(), []) }
         let eye = trimmed(raw)
         let a = eye.size.width / 2, b = eye.size.height / 2
-        let count = 4, spread = 1.60, length = 1.8, overlap = 0.8, yShift = 0.1
+        let count = 4, spread = 1.60, length = 1.8, overlap = 0.8, yShift = 0.3
 
         let lashes = (0..<count).map { i -> (CGPoint, CGPoint) in
             // 위쪽 눈꺼풀 호를 spread 만큼 훑으며 등간격으로 뿌린다.
