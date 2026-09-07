@@ -272,11 +272,66 @@ Xcode 미설치, CommandLineTools만 있음 → `xcodebuild` 사용 불가.
    유지되는지 확인되지 않았다(측정 당시 uptime 7일). 유지되지 않는다면 불필요한
    부품이므로, 구현 중 재부팅으로 확인한 뒤 필요할 때만 추가한다.
 
-## 구현 중 확인할 것
+## 구현 중 확인한 것 (2026-09-07)
 
-- `disablesleep`의 재부팅 영속성 (위 Failsafe 3번의 판단 근거)
-- `sudo -n`이 GUI 앱 컨텍스트에서 sudoers 규칙을 타는지
-- 시스템 슬립/웨이크 후 `IOPSNotification` 구독이 유지되는지, 재구독이 필요한지
+### 1. `disablesleep`의 재부팅 영속성 — **미측정**
+
+Failsafe 3번(부팅 리셋 `LaunchDaemon`)의 판단 근거인데 아직 재지 못했다.
+2026-09-07 재부팅 때 로그인 항목이 켜져 있어 부팅 32초 만에 앱이 떠버렸고,
+부팅 직후의 `SleepDisabled=No`가 부팅 리셋 때문인지 앱 때문인지 구분할 수 없었다.
+
+약한 반증 하나: `pmset -g custom`에 `disablesleep` 키가 없다. 영구 설정이 아닐
+가능성을 시사하지만 값이 `0`이라 확정할 수 없다.
+
+재현 절차 (앱을 끄고 로그인 항목도 해제한 뒤에 해야 한다):
+
+```bash
+sudo -n /usr/bin/pmset -a disablesleep 1
+ioreg -n IOPMrootDomain -r -d1 | grep -o '"SleepDisabled" = [A-Za-z]*'   # Yes 확인
+# 앱 종료 + 메뉴의 "로그인 시 시작" 해제 + 재부팅
+ioreg -n IOPMrootDomain -r -d1 | grep -o '"SleepDisabled" = [A-Za-z]*'
+```
+
+`No`면 부팅이 스스로 리셋한다 → LaunchDaemon 불필요. `Yes`면 필요하다.
+측정 전까지 Failsafe 3번은 보류 상태로 둔다.
+
+### 2. `sudo -n`이 GUI 앱 컨텍스트에서 sudoers 규칙을 탄다 — **확인됨**
+
+터미널 세션 밖에서 띄운 `.app`이 암호 프롬프트 없이 `disablesleep`을 바꾼다.
+2026-09-07 23:06 측정:
+
+```
+23:06:34  SleepDisabled = No      ← 앱 종료 상태
+23:06:34  open ChargerAwareSleep.app
+23:06:37  SleepDisabled = Yes     ← 3초 안에 전환, 암호 프롬프트 없음
+```
+
+`sudo -n`은 tty를 요구하지 않으므로 GUI 컨텍스트에서도 sudoers 규칙만 맞으면 통과한다.
+
+### 3. 시스템 슬립/웨이크 후 `IOPSNotification` 구독 유지 — **미측정**
+
+재현 절차:
+
+```bash
+sudo -n /usr/bin/pmset -a disablesleep 0
+pmset sleepnow
+# 깨운 뒤 충전기를 뽑았다 꽂으며 3초 안에 SleepDisabled 가 따라오는지 본다
+```
+
+반응이 없으면 `NSWorkspace.didWakeNotification`에서 `subscribeToPowerChanges()`를
+다시 불러야 한다는 뜻이다.
+
+### 4. (추가 발견) SIGTERM은 `applicationWillTerminate`로 오지 않는다 — **고침**
+
+2026-09-07 실측: 앱을 `pkill -x ChargerAwareSleep` 한 뒤 `SleepDisabled`가 `Yes`로
+남았다. 위 Failsafe가 "유일한 심각한 실패 모드"라고 부른 잔류 상태다.
+AppKit은 SIGTERM을 정상 종료 경로에 연결해주지 않는다. `launchctl stop`, 로그아웃
+도중의 강제 종료, 설치 스크립트가 모두 이 경로다.
+
+`DispatchSourceSignal`로 SIGTERM을 받아 `NSApp.terminate`로 돌려 해결했다.
+확인: 실행 중 `Yes` → `pkill` → `No`.
+
+SIGKILL과 크래시는 여전히 복원되지 않는다. OS 소관이라 앱이 할 수 있는 일이 없다.
 
 ## 검증
 
