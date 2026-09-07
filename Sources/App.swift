@@ -219,8 +219,8 @@ struct ChargerAwareSleepApp: App {
         return image
     }
 
-    /// 속눈썹 선 굵기(pt). SF Symbols regular 획과 눈으로 맞춘 값이다 (2026-09-07).
-    private static let lashWidth = 1.6
+    /// 속눈썹 선 굵기(pt). 눈 획(semibold)과 눈으로 맞춘 값이다 (2026-09-07).
+    private static let lashWidth = 2.0
 
     /// 감은 눈을 공용 캔버스 한가운데에서 얼마나 옮길지 (pt, +y 는 위).
     ///
@@ -236,16 +236,17 @@ struct ChargerAwareSleepApp: App {
     /// eye 계열 중 속눈썹은 eyebrow 뿐이다). eyebrow 의 속눈썹은 감은 눈 전용 곡률이라
     /// 뜬 눈 위에 얹으면 어긋난다. 그래서 눈 타원 둘레의 법선 방향으로 직접 긋는다.
     ///
-    /// pointSize 19 는 실측이다 (2026-09-07): 잉크 25.4 x 15.9pt 로 메뉴바에서 이웃
-    /// 아이콘과 높이가 같다. 기본 크기로 두면 13.0pt 라 혼자 작아 보인다.
-    /// 나머지 수(개수 4 · 길이 3.2 · 퍼짐 1.40)는 정렬 스튜디오에서 눈으로 고른 값이다
-    /// (2026-09-07). 겹침 0.8 은 실측이다 (2026-09-07): 0.4 면 바깥 두 속눈썹이 눈에서
+    /// pointSize 19 는 실측이다 (2026-09-07): 메뉴바에서 이웃 아이콘과 높이가 같다.
+    /// 기본 크기로 두면 잉크가 13.0pt 라 혼자 작아 보인다.
+    ///
+    /// weight 는 semibold, 나머지 수(개수 4 · 길이 2.3 · 퍼짐 1.60)는 스튜디오에서 눈으로
+    /// 고른 값이다 (2026-09-07). 겹침 0.8 은 실측이다: 0.4 면 바깥 두 속눈썹이 눈에서
     /// 떠 보이고, 1.2 이상이면 안쪽 속눈썹이 눈꺼풀 선을 뚫고 들어온다.
     private static func eyeAndLashes() -> (eye: NSImage, lashes: [(CGPoint, CGPoint)]) {
-        guard let raw = symbol("eye", pointSize: 19) else { return (NSImage(), []) }
+        guard let raw = symbol("eye", pointSize: 19, weight: .semibold) else { return (NSImage(), []) }
         let eye = trimmed(raw)
         let a = eye.size.width / 2, b = eye.size.height / 2
-        let count = 4, spread = 1.40, length = 3.2, overlap = 0.8, yShift = 0.1
+        let count = 4, spread = 1.60, length = 2.3, overlap = 0.8, yShift = 0.1
 
         let lashes = (0..<count).map { i -> (CGPoint, CGPoint) in
             // 위쪽 눈꺼풀 호를 spread 만큼 훑으며 등간격으로 뿌린다.
@@ -317,13 +318,15 @@ struct ChargerAwareSleepApp: App {
     /// y 12.0~18.25pt 이고 그 사이 y 9.75~11.75pt 가 완전히 비어 있다. 심볼 높이(20pt)
     /// 기준으로 그 빈 띠 아래가 46% 지점이다.
     ///
-    /// pointSize 31 도 실측이다: 잉크 25.5 x 10.5pt 로 뜬 눈의 폭(25.4pt)과 맞는다.
+    /// pointSize 29 는 뜬 눈과 폭을 맞춘 값이다. weight 는 light — eyebrow 를 크게 뽑아
+    /// 쓰는 탓에 같은 weight 면 눈꺼풀 획만 유독 두껍다. 두 상태의 획을 눈으로 맞췄다
+    /// (2026-09-07).
     ///
     /// ponytail: macOS 업데이트로 eyebrow 심볼 모양이 바뀌면 이 비율이 틀어진다.
     /// 증상은 눈썹이 남거나 속눈썹이 잘리는 것뿐이고 동작에는 영향이 없다. 틀어지면
     /// 심볼을 다시 렌더해 빈 띠 위치를 재고 두 상수만 고친다.
     private static func lidImage() -> NSImage? {
-        guard let brow = symbol("eyebrow", pointSize: 31) else { return nil }
+        guard let brow = symbol("eyebrow", pointSize: 29, weight: .light) else { return nil }
         let full = brow.size
         let keep = full.height * 0.46
         // NSImage 좌표는 왼쪽 아래가 원점이라, 아래쪽 keep 만큼이 눈꺼풀이다.
@@ -391,9 +394,10 @@ struct ChargerAwareSleepApp: App {
         }
     }
 
-    private static func symbol(_ name: String, pointSize: CGFloat) -> NSImage? {
+    private static func symbol(_ name: String, pointSize: CGFloat,
+                               weight: NSFont.Weight) -> NSImage? {
         NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: pointSize, weight: .regular))
+            .withSymbolConfiguration(.init(pointSize: pointSize, weight: weight))
     }
 
     /// 앱이 믿는 값이 아니라 IORegistry 에서 읽은 실제 값을 보여준다.
