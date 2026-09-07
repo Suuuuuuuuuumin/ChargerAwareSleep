@@ -212,18 +212,100 @@ struct ChargerAwareSleepApp: App {
     /// (2026-09-07 실측: .font(.system(size: 18)) 을 줘도 잉크 높이가 13.0pt 그대로였다)
     /// 심볼을 직접 렌더해 NSImage 로 넘긴다.
     private static func menuBarIcon(_ sleepDisabled: Bool) -> NSImage {
-        let image = trimmed(sleepDisabled ? openEye() : closedEye())
+        let image = sleepDisabled ? openEye() : closedEye()
         // 템플릿으로 두면 메뉴바 색(라이트/다크)을 시스템이 칠한다.
         image.isTemplate = true
         image.accessibilityDescription = sleepDisabled ? "잠자기 비활성" : "잠자기 활성"
         return image
     }
 
+    /// 속눈썹 선 굵기(pt). SF Symbols regular 획과 눈으로 맞춘 값이다 (2026-09-07).
+    private static let lashWidth = 1.6
+
+    /// 감은 눈을 공용 캔버스 한가운데에서 얼마나 옮길지 (pt, +y 는 위).
+    ///
+    /// 두 상태는 같은 크기 캔버스로 그려 메뉴바에서 폭이 튀지 않게 한다. 캔버스가
+    /// 같으니 남는 자유도는 감은 눈의 위치뿐이고, 그건 눈으로 정하는 값이다.
+    /// 어긋나 보이면 이 두 수만 고친다.
+    private static let lidOffset = CGPoint(x: 0, y: -4.9)
+
+    /// 속 빈 눈(`eye`)과 그 위에 얹을 속눈썹 선분들.
+    /// 좌표계 원점은 눈 잉크의 왼쪽 아래다.
+    ///
+    /// SF Symbols 에는 속눈썹 달린 뜬 눈이 없다 (2026-09-07, 심볼 8302 개 전수 확인:
+    /// eye 계열 중 속눈썹은 eyebrow 뿐이다). eyebrow 의 속눈썹은 감은 눈 전용 곡률이라
+    /// 뜬 눈 위에 얹으면 어긋난다. 그래서 눈 타원 둘레의 법선 방향으로 직접 긋는다.
+    ///
+    /// pointSize 19 는 실측이다 (2026-09-07): 잉크 25.4 x 15.9pt 로 메뉴바에서 이웃
+    /// 아이콘과 높이가 같다. 기본 크기로 두면 13.0pt 라 혼자 작아 보인다.
+    /// 나머지 수(개수 4 · 길이 3.2 · 퍼짐 1.40)는 정렬 스튜디오에서 눈으로 고른 값이다
+    /// (2026-09-07). 겹침 0.8 은 실측이다 (2026-09-07): 0.4 면 바깥 두 속눈썹이 눈에서
+    /// 떠 보이고, 1.2 이상이면 안쪽 속눈썹이 눈꺼풀 선을 뚫고 들어온다.
+    private static func eyeAndLashes() -> (eye: NSImage, lashes: [(CGPoint, CGPoint)]) {
+        guard let raw = symbol("eye", pointSize: 19) else { return (NSImage(), []) }
+        let eye = trimmed(raw)
+        let a = eye.size.width / 2, b = eye.size.height / 2
+        let count = 4, spread = 1.40, length = 3.2, overlap = 0.8, yShift = 0.1
+
+        let lashes = (0..<count).map { i -> (CGPoint, CGPoint) in
+            // 위쪽 눈꺼풀 호를 spread 만큼 훑으며 등간격으로 뿌린다.
+            let f = Double(i) / Double(count - 1)
+            let t = .pi / 2 + (f - 0.5) * spread
+            let px = a + a * cos(t), py = b + b * sin(t) - yShift
+            // 타원의 바깥 법선. 접선에 수직으로 나가야 속눈썹이 눈에 박혀 보인다.
+            var nx = cos(t) / a, ny = sin(t) / b
+            let n = (nx * nx + ny * ny).squareRoot()
+            nx /= n; ny /= n
+            // overlap 만큼 눈 안쪽에서 시작해야 이음매가 안 보인다.
+            return (CGPoint(x: px - nx * overlap, y: py - ny * overlap),
+                    CGPoint(x: px + nx * (length - overlap), y: py + ny * (length - overlap)))
+        }
+        return (eye, lashes)
+    }
+
+    /// 뜬 눈 잉크 상자 (눈 잉크 좌표계). 속눈썹까지 감싼다.
+    private static func openBox(_ eye: NSImage, _ lashes: [(CGPoint, CGPoint)]) -> CGRect {
+        let xs: [CGFloat] = lashes.flatMap { [$0.0.x, $0.1.x] } + [0, eye.size.width]
+        let ys: [CGFloat] = lashes.flatMap { [$0.0.y, $0.1.y] } + [0, eye.size.height]
+        let pad = lashWidth / 2
+        let minX = xs.min()! - pad, maxX = xs.max()! + pad
+        let minY = ys.min()! - pad, maxY = ys.max()! + pad
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+
+    /// 눈꺼풀이 놓일 자리. 뜬 눈 상자 한가운데에서 lidOffset 만큼 옮긴 곳이다.
+    private static func lidBox(_ open: CGRect, _ lid: NSImage) -> CGRect {
+        CGRect(x: open.midX - lid.size.width / 2 + lidOffset.x,
+               y: open.midY - lid.size.height / 2 + lidOffset.y,
+               width: lid.size.width, height: lid.size.height)
+    }
+
+    /// 두 상태가 공유하는 캔버스. 눈꺼풀 자리까지 합쳐야 lidOffset 이 커도 잘리지 않고,
+    /// 두 이미지 크기가 같아야 메뉴바에서 아이콘이 튀지 않는다.
+    private static func canvas(_ open: CGRect, _ lid: CGRect) -> CGRect {
+        open.union(lid)
+    }
+
     /// 뜬 눈 = 시스템이 깨어 있음.
-    /// pointSize 19 는 실측이다 (2026-09-07): 잉크 25.2 x 15.8pt, 메뉴바에서 높이 16.0pt 로
-    /// 이웃 아이콘과 같다. 기본 크기로 두면 13.0pt 라 혼자 작아 보인다.
     private static func openEye() -> NSImage {
-        symbol("eye.fill", pointSize: 19) ?? NSImage()
+        let (eye, lashes) = eyeAndLashes()
+        guard !lashes.isEmpty, let lid = lidImage() else { return eye }
+        let open = openBox(eye, lashes)
+        let box = canvas(open, lidBox(open, lid))
+        return NSImage(size: box.size, flipped: false) { _ in
+            eye.draw(in: CGRect(x: -box.minX, y: -box.minY,
+                                width: eye.size.width, height: eye.size.height))
+            NSColor.black.set()   // isTemplate 이라 실제 색은 메뉴바가 다시 칠한다.
+            let path = NSBezierPath()
+            path.lineWidth = lashWidth
+            path.lineCapStyle = .round
+            for (from, to) in lashes {
+                path.move(to: CGPoint(x: from.x - box.minX, y: from.y - box.minY))
+                path.line(to: CGPoint(x: to.x - box.minX, y: to.y - box.minY))
+            }
+            path.stroke()
+            return true
+        }
     }
 
     /// 감은 눈 = 평소대로 잘 수 있음.
@@ -235,20 +317,33 @@ struct ChargerAwareSleepApp: App {
     /// y 12.0~18.25pt 이고 그 사이 y 9.75~11.75pt 가 완전히 비어 있다. 심볼 높이(20pt)
     /// 기준으로 그 빈 띠 아래가 46% 지점이다.
     ///
-    /// pointSize 31 도 실측이다: 잉크 25.5 x 10.5pt 로 뜬 눈의 폭(25.2pt)과 맞는다.
-    /// 상태가 바뀔 때 아이콘 폭이 달라지면 옆의 메뉴바 항목들이 밀린다.
+    /// pointSize 31 도 실측이다: 잉크 25.5 x 10.5pt 로 뜬 눈의 폭(25.4pt)과 맞는다.
     ///
     /// ponytail: macOS 업데이트로 eyebrow 심볼 모양이 바뀌면 이 비율이 틀어진다.
     /// 증상은 눈썹이 남거나 속눈썹이 잘리는 것뿐이고 동작에는 영향이 없다. 틀어지면
     /// 심볼을 다시 렌더해 빈 띠 위치를 재고 두 상수만 고친다.
-    private static func closedEye() -> NSImage {
-        guard let brow = symbol("eyebrow", pointSize: 31) else { return NSImage() }
+    private static func lidImage() -> NSImage? {
+        guard let brow = symbol("eyebrow", pointSize: 31) else { return nil }
         let full = brow.size
         let keep = full.height * 0.46
-        return NSImage(size: NSSize(width: full.width, height: keep), flipped: false) { rect in
-            // NSImage 좌표는 왼쪽 아래가 원점이라, 아래쪽 keep 만큼이 눈꺼풀이다.
+        // NSImage 좌표는 왼쪽 아래가 원점이라, 아래쪽 keep 만큼이 눈꺼풀이다.
+        return trimmed(NSImage(size: NSSize(width: full.width, height: keep),
+                               flipped: false) { rect in
             brow.draw(in: rect, from: NSRect(x: 0, y: 0, width: full.width, height: keep),
                       operation: .sourceOver, fraction: 1)
+            return true
+        })
+    }
+
+    private static func closedEye() -> NSImage {
+        guard let lid = lidImage() else { return NSImage() }
+        let (eye, lashes) = eyeAndLashes()
+        guard !lashes.isEmpty else { return lid }
+        let open = openBox(eye, lashes)
+        let placed = lidBox(open, lid)
+        let box = canvas(open, placed)
+        return NSImage(size: box.size, flipped: false) { _ in
+            lid.draw(in: placed.offsetBy(dx: -box.minX, dy: -box.minY))
             return true
         }
     }
