@@ -59,3 +59,14 @@ func shouldTurnOffDisplay(lidClosed: Bool, sleepDisabled: Bool) -> Bool {
 func shouldWarnAlwaysOnBattery(mode: Mode, source: PowerSource) -> Bool {
     mode == .alwaysOn && source == .battery
 }
+
+/// 뚜껑을 여는 순간 항상 켬을 유지할지 물어봐야 하는가.
+///
+/// 트리거가 뚜껑을 **여는** 순간인 이유: 닫을 땐 화면을 볼 사람이 없다. 다시 열어
+/// 자리에 도착한 시점이야말로 사용자가 화면 앞에 있다고 확신할 수 있는 순간이다.
+///
+/// 경고 조건 자체는 메뉴 경고와 같다 — 배터리로 항상 켬. 판정을 재사용해 둘이
+/// 어긋나지 않게 한다.
+func shouldAskKeepAlwaysOn(lidClosed: Bool, mode: Mode, source: PowerSource) -> Bool {
+    !lidClosed && shouldWarnAlwaysOnBattery(mode: mode, source: source)
+}

@@ -34,6 +34,15 @@ struct PolicyTests {
         assert(shouldWarnAlwaysOnBattery(mode: .auto, source: .ac) == false)
         assert(shouldWarnAlwaysOnBattery(mode: .alwaysOff, source: .ac) == false)
 
+        // 뚜껑을 여는 순간에만 묻는다. 경고 조건 위에 뚜껑 조건이 하나 더 붙는다
+        assert(shouldAskKeepAlwaysOn(lidClosed: false, mode: .alwaysOn, source: .battery) == true,
+               "뚜껑을 열어 자리에 도착한 시점 = 사용자가 화면 앞에 있는 순간이다")
+        assert(shouldAskKeepAlwaysOn(lidClosed: true, mode: .alwaysOn, source: .battery) == false,
+               "닫는 순간엔 안 묻는다 — 볼 사람이 없다")
+        assert(shouldAskKeepAlwaysOn(lidClosed: false, mode: .alwaysOn, source: .ac) == false)
+        assert(shouldAskKeepAlwaysOn(lidClosed: false, mode: .auto, source: .battery) == false)
+        assert(shouldAskKeepAlwaysOn(lidClosed: true, mode: .alwaysOff, source: .ac) == false)
+
         // UserDefaults 왕복. rawValue 로 저장하므로 복원이 깨지면 모드가 조용히 초기화된다
         for m in Mode.allCases {
             assert(Mode(rawValue: m.rawValue) == m, "\(m) 왕복 실패")

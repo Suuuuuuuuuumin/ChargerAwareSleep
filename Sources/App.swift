@@ -33,6 +33,11 @@ final class Controller: ObservableObject {
     /// 뚜껑 개폐 구독. 소유권을 놓으면 알림이 끊긴다.
     private let lidWatcher = LidWatcher()
 
+    /// 항상 켬 확인 말풍선. lidWatcher 와 같은 이유로 프로퍼티로 붙잡는다 —
+    /// 지역변수로 두면 handleLidChange 가 끝나는 순간 참조가 사라져 popover/타이머가
+    /// 죽는다(내부 클로저들은 self 를 weak 로만 잡는다).
+    private let alwaysOnPrompt = AlwaysOnPrompt()
+
     init() {
         let raw = UserDefaults.standard.string(forKey: "mode") ?? Mode.auto.rawValue
         mode = Mode(rawValue: raw) ?? .auto
@@ -95,6 +100,21 @@ final class Controller: ObservableObject {
     private func handleLidChange(_ closed: Bool) {
         // 앱이 기억하는 값이 아니라 커널의 실제 값으로 판단한다.
         refresh()
+
+        // lidClosed 가 서로 반대라 아래 guard 와 동시에 참이 될 수 없다.
+        if shouldAskKeepAlwaysOn(lidClosed: closed, mode: mode, source: source) {
+            // 띄우는 시점을 1초 늦춘다(웨이크 대기). 그 사이 사용자가 모드를 바꿨을
+            // 수 있으므로 직전에 커널의 최신 값으로 다시 확인한다.
+            alwaysOnPrompt.show(
+                stillApplies: { [weak self] in
+                    guard let self else { return false }
+                    return shouldAskKeepAlwaysOn(lidClosed: SystemState.clamshellClosed() ?? closed,
+                                                 mode: self.mode, source: SystemState.powerSource())
+                },
+                // 자동 전환을 고르면 mode 의 didSet 이 apply() 를 불러 pmset 까지 간다.
+                onAutoSwitch: { [weak self] in self?.mode = .auto }
+            )
+        }
 
         guard shouldTurnOffDisplay(lidClosed: closed, sleepDisabled: sleepDisabled) else { return }
         switch SleepControl.displaySleepNow() {
