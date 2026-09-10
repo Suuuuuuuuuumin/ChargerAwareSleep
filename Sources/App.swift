@@ -33,11 +33,6 @@ final class Controller: ObservableObject {
     /// 뚜껑 개폐 구독. 소유권을 놓으면 알림이 끊긴다.
     private let lidWatcher = LidWatcher()
 
-    /// 항상 켬 확인 말풍선. lidWatcher 와 같은 이유로 프로퍼티로 붙잡는다 —
-    /// 지역변수로 두면 handleLidChange 가 끝나는 순간 참조가 사라져 popover/타이머가
-    /// 죽는다(내부 클로저들은 self 를 weak 로만 잡는다).
-    private let alwaysOnPrompt = AlwaysOnPrompt()
-
     init() {
         let raw = UserDefaults.standard.string(forKey: "mode") ?? Mode.auto.rawValue
         mode = Mode(rawValue: raw) ?? .auto
@@ -100,25 +95,6 @@ final class Controller: ObservableObject {
     private func handleLidChange(_ closed: Bool) {
         // 앱이 기억하는 값이 아니라 커널의 실제 값으로 판단한다.
         refresh()
-
-        // lidClosed 가 서로 반대라 아래 guard 와 동시에 참이 될 수 없다.
-        if shouldAskKeepAlwaysOn(lidClosed: closed, mode: mode, source: source) {
-            // 뚜껑 열림 직후엔 디스플레이가 웨이크 중이라 상태바 창이 아직 준비
-            // 안 됐을 수 있다 — AlwaysOnPrompt.show 내부에서 0.4 초(미측정) 늦춰 찾는다.
-            // 그 사이 사용자가 메뉴에서 모드를 바꿨을 수 있으므로, 실제로 띄우기
-            // 직전에 커널의 최신 값으로 조건을 다시 확인한다. 재확인 없이 그대로
-            // 띄우면 "자동 전환" 버튼이, 그 사이 사용자가 이미 골라둔 다른 모드를
-            // 되돌릴 위험이 있다.
-            alwaysOnPrompt.show(
-                stillApplies: { [weak self] in
-                    guard let self else { return false }
-                    return shouldAskKeepAlwaysOn(lidClosed: SystemState.clamshellClosed() ?? closed,
-                                                  mode: self.mode, source: SystemState.powerSource())
-                },
-                // 자동 전환을 고르면 mode 의 didSet 이 apply() 를 불러 pmset 까지 간다.
-                onAutoSwitch: { [weak self] in self?.mode = .auto }
-            )
-        }
 
         guard shouldTurnOffDisplay(lidClosed: closed, sleepDisabled: sleepDisabled) else { return }
         switch SleepControl.displaySleepNow() {
@@ -200,6 +176,27 @@ struct ChargerAwareSleepApp: App {
     var body: some Scene {
         MenuBarExtra {
             Text(statusLine)
+
+            // 배터리로 항상 켬이 켜져 있으면 메뉴 맨 위에서 알린다. 바로 아래
+            // 모드 목록에서 한 번 더 누르면 되돌릴 수 있으므로 버튼을 따로 두지 않는다.
+            //
+            // 증상: 항상 켬을 켜둔 채 자리를 옮기고 되돌리는 걸 잊으면, 가방 안에서
+            //   안 자고 방전·발열이 난다.
+            // 트리거: 배터리 + 항상 켬.
+            // 시도했으나 실패한 방법: 뚜껑을 열 때 아이콘에 NSPopover 말풍선을 붙이려
+            //   했다. 2026-09-10 실측 — macOS 26 은 메뉴바를 out-of-process 로 그려서
+            //   NSStatusItem 의 창이 화면 밖(x≈-3700, 화면은 x 0..2056)에 주차돼 있다.
+            //   MenuBarExtra 든 직접 만든 NSStatusItem 이든, 번들 .app 이든 맨
+            //   실행파일이든 모두 같았다. 그 좌표로 팝오버를 띄우면 화면 왼쪽 끝
+            //   (x=0)으로 밀려 아이콘과 아무 관계 없는 자리에 뜬다.
+            // 최종 결정: 앵커를 포기하고 메뉴 안의 경고 한 줄로 간다. 접근성 API 로
+            //   실제 좌표를 읽는 길이 남아 있지만, 그 권한을 설치 절차에 더할 만큼의
+            //   값어치는 없다고 봤다.
+            //
+            // 한계: 메뉴를 열어야만 보인다. 안 열어보면 여전히 모른다.
+            if shouldWarnAlwaysOnBattery(mode: controller.mode, source: controller.source) {
+                Text("⚠︎ 배터리인데 항상 켬 — 뚜껑을 닫아도 잠들지 않습니다")
+            }
 
             if let subscriptionErrorText = controller.subscriptionErrorText {
                 Divider()
