@@ -1,6 +1,5 @@
 import SwiftUI
 import IOKit.ps
-import ServiceManagement
 
 @MainActor
 final class Controller: ObservableObject {
@@ -23,10 +22,6 @@ final class Controller: ObservableObject {
     /// 패널 소등(pmset displaysleepnow) 실패. sudo 를 타지 않으므로 sudoers 힌트를 붙이면
     /// 안 된다 — applyErrorText 와 도메인이 다르다. (Task 5 판정과 같은 이유)
     @Published private(set) var displayErrorText: String?
-    /// 로그인 항목 등록·해제 실패. 사용자 조작에 대한 피드백이라 다음 조작(재시도) 때까지
-    /// 유지되고, apply() 의 전원 이벤트에 지워지지 않는다 — applyErrorText 와 도메인이 다르다.
-    @Published private(set) var loginItemErrorText: String?
-
     /// 구독을 유지하기 위해 붙잡아 둔다. 놓으면 알림이 끊긴다.
     private var runLoopSource: CFRunLoopSource?
 
@@ -124,30 +119,6 @@ final class Controller: ObservableObject {
             displayErrorText = message
         }
     }
-
-    /// SMAppService 는 macOS 13 이상에서 쓸 수 있다.
-    /// 별도 LaunchAgent plist 를 두지 않는다 — 기동 경로가 둘이면 이중 실행이 된다.
-    var launchesAtLogin: Bool {
-        get { SMAppService.mainApp.status == .enabled }
-        set {
-            do {
-                if newValue {
-                    try SMAppService.mainApp.register()
-                } else {
-                    try SMAppService.mainApp.unregister()
-                }
-                // 재시도로 성공했으면 이전 실패 메시지를 남겨두지 않는다.
-                loginItemErrorText = nil
-            } catch {
-                // SleepControl(pmset) 실패 전용인 applyErrorText 에 담으면 안 된다 —
-                // sudoers 힌트가 무관하게 같이 뜨고, 전원 이벤트로 apply() 가 도는 사이
-                // 사용자가 보기도 전에 지워질 수 있다. 전용 필드에 담는다.
-                loginItemErrorText = "로그인 항목 변경 실패: \(error.localizedDescription)"
-            }
-            objectWillChange.send()
-        }
-    }
-
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -234,12 +205,6 @@ struct ChargerAwareSleepApp: App {
                 Text("오류: 화면 끄기 실패 — \(displayErrorText)")
             }
 
-            if let loginItemErrorText = controller.loginItemErrorText {
-                Divider()
-                Text("오류: \(loginItemErrorText)")
-                Text("시스템 설정 > 일반 > 로그인 항목 에서 확인하세요")
-            }
-
             Divider()
 
             ForEach(Mode.allCases, id: \.self) { mode in
@@ -251,10 +216,6 @@ struct ChargerAwareSleepApp: App {
             }
 
             Divider()
-
-            Button(controller.launchesAtLogin ? "☑ 로그인 시 시작" : "☐ 로그인 시 시작") {
-                controller.launchesAtLogin.toggle()
-            }
 
             Button("종료 (잠자기 복원됨)") {
                 NSApplication.shared.terminate(nil)

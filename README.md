@@ -47,7 +47,9 @@ IORegistry 에서 읽은 실제 값을 보여준다.
         ./build.sh
         cp -R build/ChargerAwareSleep.app /Applications/
 
-3. 앱을 실행하고 메뉴에서 "로그인 시 시작" 을 켠다.
+3. 앱을 실행한다. 로그인할 때 자동으로 뜨게 하려면 시스템 설정 >
+   일반 > 로그인 항목 에서 `build/ChargerAwareSleep.app` 을 더한다.
+   한 번만 하면 되는 설정이라 메뉴에 두지 않았다.
    ad-hoc 서명(Developer ID 없음)으로도 `SMAppService` 등록이 실동작한다
    (2026-09-07 재부팅으로 확인).
 
@@ -86,4 +88,4 @@ IORegistry 에서 읽은 실제 값을 보여준다.
     sudo rm /etc/sudoers.d/chargerawaresleep
     rm -rf /Applications/ChargerAwareSleep.app
 
-메뉴의 "로그인 시 시작" 은 끄고 지울 것. 켠 채로 앱만 지우면 로그인 항목이 고아로 남는다.
+시스템 설정 > 일반 > 로그인 항목 에서 먼저 지울 것. 남겨둔 채 앱만 지우면 로그인 항목이 고아로 남는다.
