@@ -24,6 +24,17 @@ struct PolicyTests {
                "뚜껑이 열려 있는데 화면을 끄면 사용자가 쓰는 중인 화면을 끄는 것이다")
         assert(shouldTurnOffDisplay(lidClosed: false, sleepDisabled: false) == false)
 
+        // 항상 켬 + 배터리로 뚜껑을 열 때만 유지 여부를 묻는다
+        assert(shouldAskKeepAlwaysOn(lidClosed: false, mode: .alwaysOn, source: .battery) == true,
+               "뚜껑을 열어 자리에 도착한 시점 = 사용자가 화면 앞에 있는 유일한 순간이다")
+        assert(shouldAskKeepAlwaysOn(lidClosed: true, mode: .alwaysOn, source: .battery) == false,
+               "닫는 순간엔 안 묻는다 — 볼 사람이 없다")
+        assert(shouldAskKeepAlwaysOn(lidClosed: false, mode: .alwaysOn, source: .ac) == false,
+               "충전 중이면 방전 위험이 없어 물어볼 이유가 없다")
+        assert(shouldAskKeepAlwaysOn(lidClosed: false, mode: .auto, source: .battery) == false)
+        assert(shouldAskKeepAlwaysOn(lidClosed: false, mode: .alwaysOff, source: .battery) == false)
+        assert(shouldAskKeepAlwaysOn(lidClosed: true, mode: .auto, source: .ac) == false)
+
         // UserDefaults 왕복. rawValue 로 저장하므로 복원이 깨지면 모드가 조용히 초기화된다
         for m in Mode.allCases {
             assert(Mode(rawValue: m.rawValue) == m, "\(m) 왕복 실패")
