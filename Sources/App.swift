@@ -63,7 +63,10 @@ final class Controller: ObservableObject {
         }
         guard let source = IOPSNotificationCreateRunLoopSource(callback, context)?
             .takeRetainedValue() else { return false }
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+        // .commonModes 여야 한다. 메뉴가 열려 있는 동안 런루프는 이벤트 추적 모드로
+        // 돌고, .defaultMode 에만 걸어두면 그동안 알림이 배달되지 않는다.
+        // (2026-09-10: 메뉴를 열어둔 채 충전기를 뽑아도 "충전 중"이 그대로였다)
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         runLoopSource = source
         return true
     }

@@ -77,7 +77,9 @@ final class LidWatcher {
         }
 
         let source = IONotificationPortGetRunLoopSource(port).takeUnretainedValue()
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+        // .commonModes 여야 한다. 메뉴가 열려 있는 동안은 런루프가 이벤트 추적 모드라
+        // .defaultMode 에만 걸면 뚜껑을 닫아도 그 사이엔 알림이 오지 않는다.
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         notificationPort = port
         return true
     }
