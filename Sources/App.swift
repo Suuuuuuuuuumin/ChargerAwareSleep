@@ -235,7 +235,7 @@ struct ChargerAwareSleepApp: App {
         let image = sleepDisabled ? openEye() : closedEye()
         // 템플릿으로 두면 메뉴바 색(라이트/다크)을 시스템이 칠한다.
         image.isTemplate = true
-        image.accessibilityDescription = sleepDisabled ? "잠자기 비활성" : "잠자기 활성"
+        image.accessibilityDescription = sleepDisabled ? "잠자기 비활성화" : "잠자기 활성화"
         return image
     }
 
@@ -422,7 +422,7 @@ struct ChargerAwareSleepApp: App {
 
     /// 앱이 믿는 값이 아니라 IORegistry 에서 읽은 실제 값을 보여준다.
     private var statusLine: String {
-        let sleep = controller.sleepDisabled ? "잠자기 비활성" : "잠자기 활성"
+        let sleep = controller.sleepDisabled ? "잠자기 비활성화" : "잠자기 활성화"
         let power = controller.source == .ac ? "충전 중" : "배터리"
         let lid = SystemState.clamshellClosed() == true ? " · 뚜껑 닫힘" : ""
         return "\(sleep) · \(power)\(lid)"
