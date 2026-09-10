@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import IOKit
 import IOKit.ps
 
@@ -26,6 +27,18 @@ enum SystemState {
     /// 개폐 판정에 쓸 수 없다. (2026-09-06 실측)
     static func clamshellClosed() -> Bool? {
         rootDomainBool("AppleClamshellState")
+    }
+
+    /// 화면이 잠겨 있는가.
+    ///
+    /// 뚜껑을 열면 대개 잠금 화면이 먼저 뜬다. 그 위에 말풍선을 띄워도 사용자는
+    /// 못 본다 — 잠금 해제까지 기다려야 하는지 이 값으로 판단한다.
+    ///
+    /// CGSessionCopyCurrentDictionary 는 잠금 상태가 아닐 때 키 자체를 빼기도 해서
+    /// nil 과 false 를 구분하지 않고 "없으면 안 잠김" 으로 읽는다.
+    static func screenLocked() -> Bool {
+        guard let d = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
+        return d["CGSSessionScreenIsLocked"] as? Bool ?? false
     }
 
     /// 전원 공급원. IOPSGetProvidingPowerSourceType 은 Get 계열이라
